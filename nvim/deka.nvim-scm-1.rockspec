@@ -8,6 +8,8 @@ version = 'scm-1'
 
 source = {
   url = 'git+https://github.com/dekaruntime/editors.git',
+  -- publish-nvim.yml adds `tag = 'vX.Y.Z'` when it generates the versioned
+  -- rockspec, so a release rock is packed from its tag, not the default branch.
 }
 
 description = {
@@ -27,11 +29,12 @@ dependencies = {}
 
 build = {
   type = 'builtin',
-  -- Paths are relative to this rockspec (nvim/ in the editors repo).
+  -- Paths are relative to the source checkout, which luarocks clones from the
+  -- repo ROOT, not from this rockspec's directory: the plugin lives in nvim/.
   -- The plugin/ auto-setup entrypoint is loaded by plugin managers directly;
   -- luarocks installs the require()-able modules.
   modules = {
-    ['deka'] = 'lua/deka/init.lua',
-    ['deka.discovery'] = 'lua/deka/discovery.lua',
+    ['deka'] = 'nvim/lua/deka/init.lua',
+    ['deka.discovery'] = 'nvim/lua/deka/discovery.lua',
   },
 }

@@ -21,8 +21,10 @@ jobs:
         working-directory: nvim
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          sed "s/version = 'scm-1'/version = '$VERSION-1'/" \
+          sed -e "s/version = 'scm-1'/version = '$VERSION-1'/" \
+              -e "s|url = 'git+https://github.com/dekaruntime/editors.git',|url = 'git+https://github.com/dekaruntime/editors.git',\\n  tag = '$GITHUB_REF_NAME',|" \
             deka.nvim-scm-1.rockspec > "deka.nvim-$VERSION-1.rockspec"
+          grep -q "tag = '$GITHUB_REF_NAME'" "deka.nvim-$VERSION-1.rockspec" || { echo "::error::versioned rockspec is missing its source tag"; exit 1; }
       - name: Test
         working-directory: nvim
         run: |
