@@ -13,6 +13,11 @@ local discovery = require('deka.discovery')
 
 local M = {}
 
+--- Test hook: when set, ensure_server uses this deps table instead of
+--- host_deps(), so tests can drive the real discovery.resolve code with
+--- real vim.system calls and no network (see tests/test_managed_download.lua).
+M._test_deps = nil
+
 local config = {
   --- Optional absolute path to the dsc binary (discovery level 1).
   server_path = nil,
@@ -143,15 +148,21 @@ local function ensure_server(bufnr)
   table.insert(pending_buffers, bufnr)
   if not resolve_inflight then
     resolve_inflight = true
-    local deps = host_deps()
+    local deps = M._test_deps or host_deps()
+    -- discovery.resolve may complete synchronously (override/cache/PATH) or
+    -- asynchronously inside vim.system on_exit callbacks, which run in a
+    -- fast-event context where most vim.api calls are illegal (E5560).
+    -- Route every completion through vim.schedule_wrap so on_resolved always
+    -- runs on the main loop.
+    local on_resolved_scheduled = vim.schedule_wrap(on_resolved)
     if not deps.platform then
-      return on_resolved(nil, string.format(
+      return on_resolved_scheduled(nil, string.format(
         'DekaScript: unsupported platform %s/%s; dsc publishes darwin-arm64, darwin-x64, and linux-x64. %s',
         vim.uv.os_uname().sysname, vim.uv.os_uname().machine, discovery.INSTALL_HINT
       ))
     end
     deps.mkdirp(deps.cache_dir)
-    discovery.resolve(deps, on_resolved)
+    discovery.resolve(deps, on_resolved_scheduled)
   end
   return true
 end
