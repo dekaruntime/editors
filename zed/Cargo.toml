@@ -1,0 +1,15 @@
+[package]
+name = "deka-zed"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Zed extension for DekaScript (dekaruntime/editors)"
+repository = "https://github.com/dekaruntime/editors"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+zed_extension_api = "0.7"
+serde_json = "1"
+sha2 = "0.10"

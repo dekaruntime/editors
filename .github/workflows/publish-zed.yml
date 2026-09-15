@@ -1,0 +1,63 @@
+name: publish-zed
+
+# Prepares the DekaScript Zed extension for the Zed extension registry.
+#
+# Zed's registry is the zed-industries/extensions repo: publishing means a PR
+# adding this repo as a submodule-style extension entry. That upstream PR must
+# come from a maintainer with push access, so this workflow validates the
+# extension, builds the wasm, and prints the exact upstreaming diff. If
+# ZED_EXTENSIONS_TOKEN (a PAT with push access to zed-industries/extensions)
+# is added later, the final step opens the PR automatically.
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  prepare:
+    runs-on: [self-hosted, macOS, ARM64]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install wasm32-wasip1 target
+        run: rustup target add wasm32-wasip1
+      - name: Build extension wasm
+        working-directory: zed
+        run: cargo build --release --target wasm32-wasip1 --locked
+      - name: Validate extension manifest
+        run: |
+          test -f zed/extension.toml
+          grep -q '^\[grammars.deka\]' zed/extension.toml
+          grep -q '^\[language_servers.deka\]' zed/extension.toml
+      - name: Upstream to zed-industries/extensions (needs ZED_EXTENSIONS_TOKEN)
+        if: ${{ secrets.ZED_EXTENSIONS_TOKEN != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.ZED_EXTENSIONS_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          gh repo clone zed-industries/extensions extensions
+          cd extensions
+          git config user.name "dekaruntime-bot"
+          git config user.email "bot@deka.gg"
+          BRANCH="add-deka-${TAG}"
+          git checkout -b "$BRANCH"
+          if ! grep -q 'dekaruntime/editors' extensions.toml; then
+            printf '\n[deka]\nsubmodule = "extensions/deka"\nversion = "%s"\n' "${TAG#v}" >> extensions.toml
+          fi
+          git submodule add --force https://github.com/dekaruntime/editors extensions/deka 2>/dev/null || true
+          cd extensions/deka
+          git checkout "$TAG"
+          cd ../..
+          git add extensions.toml extensions/deka
+          git commit -m "Add DekaScript extension v${TAG#v}" || true
+          git push -u origin "$BRANCH"
+          gh pr create --repo zed-industries/extensions \
+            --title "Add DekaScript extension v${TAG#v}" \
+            --body "Adds the DekaScript extension (dekaruntime/editors). Language server: dsc lsp (stdio), resolved via bundled > PATH > version-pinned managed download." \
+            --head "$BRANCH" || true
+      - name: Print manual upstreaming instructions
+        if: ${{ secrets.ZED_EXTENSIONS_TOKEN == '' }}
+        run: |
+          echo "No ZED_EXTENSIONS_TOKEN: upstreaming is manual."
+          echo "1. PR to zed-industries/extensions adding extensions/deka as a submodule of dekaruntime/editors at ${GITHUB_REF_NAME}."
+          echo "2. Add the [deka] entry to extensions.toml (version = ${GITHUB_REF_NAME#v})."

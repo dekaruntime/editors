@@ -1,0 +1,36 @@
+name: publish-nvim
+
+# Publishes deka.nvim to luarocks.org on v* tags.
+#
+# Secret Ava must add:
+#   LUAROCKS_API_KEY — API key from luarocks.org (Settings -> API keys)
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  publish:
+    runs-on: [self-hosted, macOS, ARM64]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install LuaRocks
+        run: brew install luarocks
+      - name: Set rock version from tag
+        working-directory: nvim
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          sed "s/version = 'scm-1'/version = '$VERSION-1'/" \
+            deka.nvim-scm-1.rockspec > "deka.nvim-$VERSION-1.rockspec"
+      - name: Test
+        working-directory: nvim
+        run: |
+          brew install neovim
+          nvim --headless -u NONE -l tests/test_discovery.lua
+      - name: Upload rock to luarocks.org
+        working-directory: nvim
+        env:
+          LUAROCKS_API_KEY: ${{ secrets.LUAROCKS_API_KEY }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          luarocks upload --api-key="$LUAROCKS_API_KEY" "deka.nvim-$VERSION-1.rockspec"

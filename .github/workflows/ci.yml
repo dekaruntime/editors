@@ -1,0 +1,70 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags-ignore: ['v*']
+
+jobs:
+  vscode:
+    runs-on: [self-hosted, macOS, ARM64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install, typecheck, and test
+        working-directory: vscode
+        run: |
+          npm ci
+          npm run compile
+          npm test
+      - name: Package VSIX
+        working-directory: vscode
+        run: npx @vscode/vsce package --out deka.vsix
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deka-vsix
+          path: vscode/deka.vsix
+
+  zed:
+    runs-on: [self-hosted, macOS, ARM64]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install wasm32-wasip1 target
+        run: rustup target add wasm32-wasip1
+      - name: Build extension wasm
+        working-directory: zed
+        run: cargo build --release --target wasm32-wasip1 --locked
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deka-zed-wasm
+          path: zed/target/wasm32-wasip1/release/deka_zed.wasm
+
+  nvim:
+    runs-on: [self-hosted, macOS, ARM64]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Neovim
+        run: |
+          brew install neovim
+      - name: Lua syntax check
+        working-directory: nvim
+        run: |
+          nvim --headless -u NONE -l tests/test_discovery.lua
+      - name: Headless plugin smoke test (attaches dsc lsp from PATH)
+        working-directory: nvim
+        env:
+          DEKA_SMOKE_SAMPLE: ${{ runner.temp }}/deka-smoke/sample.ds
+          DEKA_SMOKE_OUT: ${{ runner.temp }}/deka-smoke/out.log
+        run: |
+          brew install neovim
+          mkdir -p "$(dirname "$DEKA_SMOKE_SAMPLE")"
+          printf 'export fn main(): string {\n  return "hi"\n}\n' > "$DEKA_SMOKE_SAMPLE"
+          # dsc is already on the self-hosted runner PATH; smoke.lua exits 1
+          # unless the deka client attaches.
+          nvim --headless -u NONE --cmd "set rtp+=." \
+            -c "runtime plugin/deka.lua" \
+            -c "luafile scripts/smoke.lua"
+          cat "$DEKA_SMOKE_OUT"

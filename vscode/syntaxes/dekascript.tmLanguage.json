@@ -1,0 +1,106 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "DekaScript",
+  "scopeName": "source.dekascript",
+  "fileTypes": ["ds", "dsx"],
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#keywords" },
+    { "include": "#storage" },
+    { "include": "#types" },
+    { "include": "#annotations" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.dekascript",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.dekascript",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.dekascript",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "source.js.embedded.dekascript",
+              "begin": "\\$\\{",
+              "end": "\\}",
+              "patterns": [{ "include": "$self" }]
+            },
+            { "name": "constant.character.escape.dekascript", "match": "\\\\." }
+          ]
+        },
+        {
+          "name": "string.quoted.single.dekascript",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            { "name": "constant.character.escape.dekascript", "match": "\\\\." }
+          ]
+        },
+        {
+          "name": "string.backtick.dekascript",
+          "begin": "`",
+          "end": "`",
+          "patterns": [
+            {
+              "name": "source.js.embedded.dekascript",
+              "begin": "\\$\\{",
+              "end": "\\}",
+              "patterns": [{ "include": "$self" }]
+            },
+            { "name": "constant.character.escape.dekascript", "match": "\\\\." }
+          ]
+        }
+      ]
+    },
+    "numbers": {
+      "name": "constant.numeric.dekascript",
+      "match": "\\b(0[xX][0-9a-fA-F_]+|0[bB][01_]+|[0-9][0-9_]*(\\.[0-9_]+)?([eE][+-]?[0-9_]+)?)n?\\b"
+    },
+    "keywords": {
+      "name": "keyword.control.dekascript",
+      "match": "\\b(?:if|else|for|of|return|match|break|continue|await|async)\\b"
+    },
+    "storage": {
+      "patterns": [
+        {
+          "name": "storage.modifier.dekascript",
+          "match": "\\b(?:const|let|mut|pub|export|import|from|as)\\b"
+        },
+        {
+          "name": "storage.type.dekascript",
+          "match": "\\b(?:function|fn|struct|enum|interface|type|alias|unsafe|build|bridge|super)\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "constant.language.dekascript",
+          "match": "\\b(?:true|false|none)\\b"
+        },
+        {
+          "name": "support.type.primitive.dekascript",
+          "match": "\\b(?:string|number|boolean|int|float|void|never|unknown|Array|List|Map|Set|Result|Option|Component)\\b"
+        }
+      ]
+    },
+    "annotations": {
+      "name": "storage.modifier.annotation.dekascript",
+      "match": "@[A-Za-z_$][A-Za-z0-9_$]*"
+    }
+  }
+}
