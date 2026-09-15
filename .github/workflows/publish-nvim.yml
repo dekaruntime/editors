@@ -1,6 +1,6 @@
 name: publish-nvim
 
-# Publishes deka.nvim to luarocks.org on v* tags.
+# Publishes the Neovim plugin to luarocks.org as the `deka` rock on v* tags.
 #
 # Secret Ava must add:
 #   LUAROCKS_API_KEY — API key from luarocks.org (Settings -> API keys)
@@ -23,8 +23,8 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           sed -e "s/version = 'scm-1'/version = '$VERSION-1'/" \
               -e "s|url = 'git+https://github.com/dekaruntime/editors.git',|url = 'git+https://github.com/dekaruntime/editors.git',\\n  tag = '$GITHUB_REF_NAME',|" \
-            deka.nvim-scm-1.rockspec > "deka.nvim-$VERSION-1.rockspec"
-          grep -q "tag = '$GITHUB_REF_NAME'" "deka.nvim-$VERSION-1.rockspec" || { echo "::error::versioned rockspec is missing its source tag"; exit 1; }
+            deka-scm-1.rockspec > "deka-$VERSION-1.rockspec"
+          grep -q "tag = '$GITHUB_REF_NAME'" "deka-$VERSION-1.rockspec" || { echo "::error::versioned rockspec is missing its source tag"; exit 1; }
       - name: Test
         working-directory: nvim
         run: |
@@ -36,4 +36,4 @@ jobs:
           LUAROCKS_API_KEY: ${{ secrets.LUAROCKS_API_KEY }}
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          luarocks upload --api-key="$LUAROCKS_API_KEY" "deka.nvim-$VERSION-1.rockspec"
+          luarocks upload --api-key="$LUAROCKS_API_KEY" "deka-$VERSION-1.rockspec"

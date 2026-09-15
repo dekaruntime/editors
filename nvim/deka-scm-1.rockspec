@@ -1,9 +1,9 @@
--- deka.nvim — Neovim plugin for DekaScript (LSP via `dsc lsp`, stdio).
+-- deka (rock) / deka.nvim (plugin): Neovim plugin for DekaScript (LSP via `dsc lsp`, stdio).
 --
 -- Installed via luarocks or any plugin manager; zero required configuration.
 -- See https://github.com/dekaruntime/editors for the full documentation.
 
-package = 'deka.nvim'
+package = 'deka'
 version = 'scm-1'
 
 source = {
