@@ -1,3 +1,6 @@
+# SCCACHE IS REQUIRED FOR ALL RUST COMPILATION.
+# EVERY CARGO BUILD/TEST/CHECK MUST RUN WITH RUSTC_WRAPPER=sccache. NO EXCEPTIONS.
+
 name: publish-zed
 
 # Prepares the DekaScript Zed extension for the Zed extension registry.
@@ -30,26 +33,25 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.96.0
         with:
           targets: wasm32-wasip1
-      # Two-mode, a deliberate deviation from dekaruntime/deka's loud failure:
-      # the R2 secrets are staff-only and may not be provisioned in this repo,
-      # so missing credentials downgrade to sccache's local disk cache instead
-      # of failing the build. With all three vars present (public-ci or release
-      # environment), behavior matches deka: an arch-derived shared bucket.
+      # R2 cache credentials come from the job's environment (public-ci or release).
+      # Missing credentials fail the job, as in dekaruntime/deka: a cold build hides a broken setup.
       - name: Configure sccache bucket
         run: |
           if [ -n "$AWS_ACCESS_KEY_ID" ] && [ -n "$AWS_SECRET_ACCESS_KEY" ] && [ -n "$SCCACHE_ENDPOINT" ]; then
-            # Bucket is architecture-specific; derive it from the host rather than
-            # restating it per job (mirrors dekaruntime/deka's ci.yml, deka#655).
+            # One shared bucket, `tooling`, scoped to this org's tooling repos; the token
+            # can reach nothing else. Architectures are separated by key prefix.
             case "$(uname -s)-$(uname -m)" in
-              Darwin-arm64)  BUCKET=deka-sccache-darwin-arm64 ;;
-              Darwin-x86_64) BUCKET=deka-sccache-darwin-x64 ;;
-              Linux-x86_64)  BUCKET=deka-sccache-linux-x64 ;;
+              Darwin-arm64)  PREFIX=editors/darwin-arm64 ;;
+              Darwin-x86_64) PREFIX=editors/darwin-x64 ;;
+              Linux-x86_64)  PREFIX=editors/linux-x64 ;;
               *) echo "unsupported sccache host: $(uname -sm)" >&2; exit 1 ;;
             esac
-            echo "SCCACHE_BUCKET=$BUCKET" >> "$GITHUB_ENV"
-            echo "sccache bucket: $BUCKET"
+            echo "SCCACHE_BUCKET=tooling" >> "$GITHUB_ENV"
+            echo "SCCACHE_S3_KEY_PREFIX=$PREFIX" >> "$GITHUB_ENV"
+            echo "sccache bucket: tooling/$PREFIX"
           else
-            echo "::warning::R2 sccache credentials are not configured in this repository yet; sccache will use its local disk cache. Add R2_ENDPOINT / R2_SCCACHE_ACCESS_KEY_ID / R2_SCCACHE_SECRET_ACCESS_KEY to the public-ci or release environment to enable the shared bucket (same names as dekaruntime/deka)."
+            echo "::error::R2 sccache credentials are missing. SCCACHE IS REQUIRED FOR ALL RUST COMPILATION."
+            exit 1
           fi
       # The action installs the binary. It runs after the bucket step so it
       # receives the complete R2 cache configuration.
