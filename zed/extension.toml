@@ -1,6 +1,6 @@
 id = "deka"
 name = "DekaScript"
-version = "0.1.0"
+version = "0.1.1"
 schema_version = 2
 authors = ["Sami Fouad <https://samifou.ad>"]
 description = "DekaScript support: tree-sitter highlighting and the `dsc lsp` language server"
