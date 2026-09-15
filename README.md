@@ -105,7 +105,7 @@ The plugin lives in the `nvim/` directory of this monorepo:
 ```
 
 Once the rock is published, luarocks/rocks.nvim users can also
-`luarocks install deka.nvim` and skip the `rtp` dance entirely.
+`luarocks install deka` and skip the `rtp` dance entirely.
 
 Zero required configuration: on `*.ds` / `*.dsx` buffers the plugin attaches
 `dsc lsp` using the search order above, with root detection via `deka.json` →
