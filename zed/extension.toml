@@ -1,0 +1,18 @@
+id = "deka"
+name = "DekaScript"
+version = "0.1.0"
+schema_version = 2
+authors = ["Sami Fouad <https://samifou.ad>"]
+description = "DekaScript support: tree-sitter highlighting and the `dsc lsp` language server"
+repository = "https://github.com/dekaruntime/editors"
+
+[language_servers.deka]
+name = "DekaScript Language Server"
+languages = ["dekascript"]
+language_ids = { dekascript = "dekascript" }
+
+# tree-sitter-deka grammar. Repin to `main` once dekaruntime/tree-sitter-deka#1049
+# (grammar fork) merges: main currently holds only the empty base commit.
+[grammars.deka]
+repository = "https://github.com/dekaruntime/tree-sitter-deka"
+commit = "18a1cd20079ac6373a1b8fefa0a080859599e5a3"

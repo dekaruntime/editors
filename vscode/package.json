@@ -1,0 +1,82 @@
+{
+  "name": "deka",
+  "displayName": "DekaScript",
+  "description": "DekaScript language support: LSP (dsc lsp), syntax highlighting for .ds and .dsx",
+  "publisher": "dekaruntime",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dekaruntime/editors.git",
+    "directory": "vscode"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters",
+    "Formatters"
+  ],
+  "activationEvents": [
+    "onLanguage:dekascript"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "dekascript",
+        "aliases": [
+          "DekaScript",
+          "dekascript"
+        ],
+        "extensions": [
+          ".ds",
+          ".dsx"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "dekascript",
+        "scopeName": "source.dekascript",
+        "path": "./syntaxes/dekascript.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "DekaScript",
+      "properties": {
+        "deka.server.path": {
+          "type": "string",
+          "default": "",
+          "description": "Optional absolute path to the dsc binary. When empty (default), the extension falls back to bundled > PATH > managed download. Server is started as `dsc lsp` (stdio)."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "deka.downloadServer",
+        "title": "DekaScript: Download Language Server",
+        "description": "Force a fresh managed download of the pinned dsc binary (version-pinned, checksum-verified)"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "node ../scripts/sync-dsc-version.js && tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile",
+    "test": "node --test out/test/*.test.js",
+    "vscode:prepublish": "npm run compile",
+    "package": "vsce package --out deka.vsix"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.2.0",
+    "typescript": "^5.7.0"
+  }
+}

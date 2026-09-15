@@ -1,0 +1,43 @@
+name: publish-vscode
+
+# Publishes the deka VS Code extension to the VS Marketplace (VS Code) and
+# OpenVSX (Cursor and other open editors) on v* tags.
+#
+# Secrets Ava must add:
+#   VSCE_PAT   — Azure DevOps personal access token for publisher `dekaruntime`
+#   OVSX_PAT   — open-vsx.org access token
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  publish:
+    runs-on: [self-hosted, macOS, ARM64]
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Version from tag
+        working-directory: vscode
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          npm version --no-git-tag-version "$VERSION"
+      - name: Install and build
+        working-directory: vscode
+        run: |
+          npm ci
+          npm run compile
+          npm test
+      - name: Publish to VS Marketplace
+        working-directory: vscode
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: npx @vscode/vsce publish -p "$VSCE_PAT"
+      - name: Publish to OpenVSX
+        working-directory: vscode
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: npx ovsx publish -p "$OVSX_PAT"
