@@ -19,8 +19,28 @@
 
 local M = {}
 
--- Pinned dsc release. Bump with deka's scripts/dsc-version pin.
-M.DSC_VERSION = '0.53.4'
+-- Pinned dsc release. Single source of truth is the repo-root DSC_VERSION
+-- file; when the plugin runs from the repo checkout we read it, and the
+-- fallback constant keeps plugins installed outside the repo (luarocks)
+-- working. Keep both in step — scripts/check-dsc-version.sh fails CI on drift.
+local function pinned_version()
+  local source = debug.getinfo(1, 'S').source
+  local nvim_dir = source:match('^@(.+)/lua/deka/discovery%.lua$')
+  if nvim_dir then
+    local f = io.open(nvim_dir .. '/../../DSC_VERSION', 'r')
+    if f then
+      local pinned = f:read('*l')
+      f:close()
+      pinned = pinned and pinned:match('^%s*(.-)%s*$') or nil
+      if pinned ~= nil and pinned ~= '' then
+        return pinned
+      end
+    end
+  end
+  return nil
+end
+
+M.DSC_VERSION = pinned_version() or '0.53.4'
 M.RELEASE_BASE_URL = 'https://dsc-wasm.deka.gg'
 M.INSTALL_HINT = 'Install dsc: curl -fsSL https://deka.gg/install.sh | bash'
 

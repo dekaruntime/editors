@@ -63,7 +63,7 @@
     ]
   },
   "scripts": {
-    "compile": "tsc -p ./",
+    "compile": "node ../scripts/sync-dsc-version.js && tsc -p ./",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile",
     "test": "node --test out/test/*.test.js",

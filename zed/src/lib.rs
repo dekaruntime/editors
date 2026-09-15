@@ -20,8 +20,10 @@ use std::fs;
 use zed_extension_api as zed;
 use zed::{Command, DownloadedFileType, LanguageServerId, LanguageServerInstallationStatus, Result, Worktree};
 
-/// Pinned dsc release. Bump with deka's scripts/dsc-version pin.
-const DSC_VERSION: &str = "0.53.4";
+/// Pinned dsc release, single-sourced from the repo-root DSC_VERSION file
+/// (keep the include path — scripts/check-dsc-version.sh fails CI on drift).
+/// The file ends in a newline, so trim at the point of use.
+const DSC_VERSION: &str = include_str!("../../DSC_VERSION");
 const RELEASE_BASE_URL: &str = "https://dsc-wasm.deka.gg";
 const INSTALL_HINT: &str = "Install dsc: curl -fsSL https://deka.gg/install.sh | bash";
 
@@ -59,8 +61,9 @@ impl DekaExtension {
 
         let (platform_key, binary_name) = platform_artifact()
             .ok_or_else(unsupported_platform_error)?;
+        let version = DSC_VERSION.trim();
 
-        let manifest_url = format!("{RELEASE_BASE_URL}/v{DSC_VERSION}/release.json");
+        let manifest_url = format!("{RELEASE_BASE_URL}/v{version}/release.json");
         let request = zed::http_client::HttpRequest::builder()
             .method(zed::http_client::HttpMethod::Get)
             .url(manifest_url)
@@ -75,9 +78,9 @@ impl DekaExtension {
             .get("version")
             .and_then(|value| value.as_str())
             .unwrap_or("");
-        if published != DSC_VERSION {
+        if published != version {
             return Err(format!(
-                "release manifest describes version {published}, not {DSC_VERSION}"
+                "release manifest describes version {published}, not {version}"
             ));
         }
         let expected_sha = manifest
@@ -87,7 +90,7 @@ impl DekaExtension {
             .and_then(|sha| sha.as_str())
             .ok_or_else(|| format!("no {platform_key} binary in the release manifest"))?;
 
-        let version_dir = format!("dsc-v{DSC_VERSION}");
+        let version_dir = format!("dsc-v{version}");
         let binary_path = format!("{version_dir}/{binary_name}");
 
         if !fs::metadata(&binary_path).is_ok_and(|stat| stat.is_file()) {
@@ -97,11 +100,11 @@ impl DekaExtension {
             );
 
             zed::download_file(
-                &format!("{RELEASE_BASE_URL}/v{DSC_VERSION}/{binary_name}"),
+                &format!("{RELEASE_BASE_URL}/v{version}/{binary_name}"),
                 &version_dir,
                 DownloadedFileType::Uncompressed,
             )
-            .map_err(|err| format!("failed to download dsc v{DSC_VERSION}: {err}"))?;
+            .map_err(|err| format!("failed to download dsc v{version}: {err}"))?;
 
             // Verify the published sha256 before the binary is ever executed.
             use sha2::Digest;
@@ -111,7 +114,7 @@ impl DekaExtension {
             if actual_sha != expected_sha {
                 fs::remove_file(&binary_path).ok();
                 return Err(format!(
-                    "dsc checksum mismatch for {platform_key} v{DSC_VERSION}: expected {expected_sha}, got {actual_sha}"
+                    "dsc checksum mismatch for {platform_key} v{version}: expected {expected_sha}, got {actual_sha}"
                 ));
             }
 

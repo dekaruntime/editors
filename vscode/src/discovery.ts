@@ -15,7 +15,11 @@
 // All effects are injected through DiscoveryDeps so the whole module is
 // unit-testable with a mocked fs/PATH/network (see src/test/discovery.test.ts).
 
-export const DSC_VERSION = '0.53.4';
+// DSC_VERSION lives in ./dsc-version.ts, generated from the repo-root
+// DSC_VERSION file (the single source of truth across clients) by
+// scripts/sync-dsc-version.js at build time.
+import { DSC_VERSION } from './dsc-version';
+export { DSC_VERSION };
 export const RELEASE_BASE_URL = 'https://dsc-wasm.deka.gg';
 export const INSTALL_HINT =
   'Install dsc: curl -fsSL https://deka.gg/install.sh | bash';
