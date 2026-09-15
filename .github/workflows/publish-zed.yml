@@ -3,11 +3,11 @@ name: publish-zed
 # Prepares the DekaScript Zed extension for the Zed extension registry.
 #
 # Zed's registry is the zed-industries/extensions repo: publishing means a PR
-# adding this repo as a submodule-style extension entry. That upstream PR must
-# come from a maintainer with push access, so this workflow validates the
-# extension, builds the wasm, and prints the exact upstreaming diff. If
-# ZED_EXTENSIONS_TOKEN (a PAT with push access to zed-industries/extensions)
-# is added later, the final step opens the PR automatically.
+# adding dekaruntime/editors as an extension entry there. That upstream PR must
+# come from a maintainer with push access, and there is intentionally NO
+# ZED_EXTENSIONS_TOKEN in this repo — staff confirmed Zed publishing is done
+# by hand via a fork. So this workflow only validates the extension, builds
+# the wasm, and prints the exact manual upstreaming steps on every v* tag.
 
 on:
   push:
@@ -16,10 +16,56 @@ on:
 jobs:
   prepare:
     runs-on: [self-hosted, macOS, ARM64]
+    environment: release
+    env:
+      CARGO_INCREMENTAL: 0
+      SCCACHE_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+      SCCACHE_REGION: "auto"
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_SCCACHE_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SCCACHE_SECRET_ACCESS_KEY }}
     steps:
       - uses: actions/checkout@v4
-      - name: Install wasm32-wasip1 target
-        run: rustup target add wasm32-wasip1
+      # The bugsy runner has no rustup on PATH; this action bootstraps it and
+      # installs the pinned toolchain plus the wasm target in one step.
+      - uses: dtolnay/rust-toolchain@1.96.0
+        with:
+          targets: wasm32-wasip1
+      - name: Configure sccache bucket
+        run: |
+          if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ] || [ -z "$SCCACHE_ENDPOINT" ]; then
+            echo "::error::R2 sccache credentials are missing. SCCACHE IS REQUIRED FOR ALL RUST COMPILATION."
+            exit 1
+          fi
+          # Bucket is architecture-specific; derive it from the host rather than
+          # restating it per job (mirrors dekaruntime/deka's ci.yml, deka#655).
+          case "$(uname -s)-$(uname -m)" in
+            Darwin-arm64)  BUCKET=deka-sccache-darwin-arm64 ;;
+            Darwin-x86_64) BUCKET=deka-sccache-darwin-x64 ;;
+            Linux-x86_64)  BUCKET=deka-sccache-linux-x64 ;;
+            *) echo "unsupported sccache host: $(uname -sm)" >&2; exit 1 ;;
+          esac
+          echo "SCCACHE_BUCKET=$BUCKET" >> "$GITHUB_ENV"
+          echo "sccache bucket: $BUCKET"
+      # The action installs the binary. It runs after the bucket step so it
+      # receives the complete R2 cache configuration.
+      - uses: mozilla-actions/sccache-action@v0.0.9
+      - name: Enable sccache compiler wrapper
+        run: |
+          # The rust-toolchain action reinstalls rustup, which wipes
+          # cargo-installed binaries out of ~/.cargo/bin - sccache included.
+          # Setting RUSTC_WRAPPER to a binary that is not there makes every
+          # cargo invocation die with ENOENT before it compiles anything,
+          # which reads as a code failure and is not one. Only enable the
+          # wrapper if the binary actually exists, and fail loudly when it
+          # does not: a cold build hides a broken runner, and sccache is
+          # required.
+          if command -v sccache >/dev/null 2>&1; then
+            echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
+            echo "sccache enabled, bucket: $SCCACHE_BUCKET"
+          else
+            echo "::error::sccache is not on PATH. SCCACHE IS REQUIRED FOR ALL RUST COMPILATION."
+            exit 1
+          fi
       - name: Build extension wasm
         working-directory: zed
         run: cargo build --release --target wasm32-wasip1 --locked
@@ -28,36 +74,24 @@ jobs:
           test -f zed/extension.toml
           grep -q '^\[grammars.deka\]' zed/extension.toml
           grep -q '^\[language_servers.deka\]' zed/extension.toml
-      - name: Upstream to zed-industries/extensions (needs ZED_EXTENSIONS_TOKEN)
-        if: ${{ secrets.ZED_EXTENSIONS_TOKEN != '' }}
+      - name: Print manual upstreaming instructions
         env:
-          GH_TOKEN: ${{ secrets.ZED_EXTENSIONS_TOKEN }}
           TAG: ${{ github.ref_name }}
         run: |
-          set -euo pipefail
-          gh repo clone zed-industries/extensions extensions
-          cd extensions
-          git config user.name "dekaruntime-bot"
-          git config user.email "bot@deka.gg"
-          BRANCH="add-deka-${TAG}"
-          git checkout -b "$BRANCH"
-          if ! grep -q 'dekaruntime/editors' extensions.toml; then
-            printf '\n[deka]\nsubmodule = "extensions/deka"\nversion = "%s"\n' "${TAG#v}" >> extensions.toml
-          fi
-          git submodule add --force https://github.com/dekaruntime/editors extensions/deka 2>/dev/null || true
-          cd extensions/deka
-          git checkout "$TAG"
-          cd ../..
-          git add extensions.toml extensions/deka
-          git commit -m "Add DekaScript extension v${TAG#v}" || true
-          git push -u origin "$BRANCH"
-          gh pr create --repo zed-industries/extensions \
-            --title "Add DekaScript extension v${TAG#v}" \
-            --body "Adds the DekaScript extension (dekaruntime/editors). Language server: dsc lsp (stdio), resolved via bundled > PATH > version-pinned managed download." \
-            --head "$BRANCH" || true
-      - name: Print manual upstreaming instructions
-        if: ${{ secrets.ZED_EXTENSIONS_TOKEN == '' }}
-        run: |
-          echo "No ZED_EXTENSIONS_TOKEN: upstreaming is manual."
-          echo "1. PR to zed-industries/extensions adding extensions/deka as a submodule of dekaruntime/editors at ${GITHUB_REF_NAME}."
-          echo "2. Add the [deka] entry to extensions.toml (version = ${GITHUB_REF_NAME#v})."
+          VERSION="${TAG#v}"
+          echo "Zed extension v${VERSION} built and validated."
+          echo ""
+          echo "Zed publishing is manual — there is no ZED_EXTENSIONS_TOKEN in this repo."
+          echo "Upstream it with a PR against zed-industries/extensions:"
+          echo ""
+          echo "  1. Fork https://github.com/zed-industries/extensions and clone your fork."
+          echo "  2. Add dekaruntime/editors as a submodule at tag ${TAG}:"
+          echo "       git submodule add https://github.com/dekaruntime/editors extensions/deka"
+          echo "       cd extensions/deka && git checkout ${TAG} && cd ../.."
+          echo "  3. Bump the version to ${VERSION} in extensions.toml:"
+          echo "       [deka]"
+          echo "       submodule = \"extensions/deka\""
+          echo "       version = \"${VERSION}\""
+          echo "  4. Open a PR to zed-industries/extensions titled:"
+          echo "       \"Add DekaScript extension v${VERSION}\""
+          echo "  5. Docs: https://zed.dev/docs/extensions/developing-extensions"
