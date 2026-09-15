@@ -38,16 +38,17 @@ jobs:
       - name: Configure sccache bucket
         run: |
           if [ -n "$AWS_ACCESS_KEY_ID" ] && [ -n "$AWS_SECRET_ACCESS_KEY" ] && [ -n "$SCCACHE_ENDPOINT" ]; then
-            # Bucket is architecture-specific; derive it from the host rather than
-            # restating it per job (mirrors dekaruntime/deka's ci.yml, deka#655).
+            # One shared bucket, `tooling`, scoped to this org's tooling repos; the token
+            # can reach nothing else. Architectures are separated by key prefix.
             case "$(uname -s)-$(uname -m)" in
-              Darwin-arm64)  BUCKET=deka-sccache-darwin-arm64 ;;
-              Darwin-x86_64) BUCKET=deka-sccache-darwin-x64 ;;
-              Linux-x86_64)  BUCKET=deka-sccache-linux-x64 ;;
+              Darwin-arm64)  PREFIX=editors/darwin-arm64 ;;
+              Darwin-x86_64) PREFIX=editors/darwin-x64 ;;
+              Linux-x86_64)  PREFIX=editors/linux-x64 ;;
               *) echo "unsupported sccache host: $(uname -sm)" >&2; exit 1 ;;
             esac
-            echo "SCCACHE_BUCKET=$BUCKET" >> "$GITHUB_ENV"
-            echo "sccache bucket: $BUCKET"
+            echo "SCCACHE_BUCKET=tooling" >> "$GITHUB_ENV"
+            echo "SCCACHE_S3_KEY_PREFIX=$PREFIX" >> "$GITHUB_ENV"
+            echo "sccache bucket: tooling/$PREFIX"
           else
             echo "::error::R2 sccache credentials are missing. SCCACHE IS REQUIRED FOR ALL RUST COMPILATION."
             exit 1
