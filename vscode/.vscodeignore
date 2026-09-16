@@ -4,6 +4,6 @@ src/**
 .vscodeignore
 tsconfig.json
 **/*.map
-out/test/**
+out/**
 .gitignore
 package-lock.json

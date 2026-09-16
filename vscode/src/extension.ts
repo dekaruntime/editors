@@ -58,8 +58,15 @@ async function startClient(
   }
 
   const cacheDir = context.globalStorageUri.fsPath;
+  const dirname = require('node:path').dirname as (p: string) => string;
+  const activeDocDir = vscode.window.activeTextEditor?.document.uri.fsPath;
+  const projectSearchDirs = [
+    ...(activeDocDir ? [dirname(activeDocDir)] : []),
+    ...(vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath),
+  ];
   const deps = nodeDeps({
     overridePath: nonempty(config.get<string>('server.path')),
+    projectSearchDirs,
     bundledDir: vscode.Uri.joinPath(context.extensionUri, 'bin').fsPath,
     cacheDir,
     skipCache: opts.forceDownload,
@@ -104,6 +111,7 @@ function nonempty(value: string | undefined): string | undefined {
 /** Wire Node built-ins into the injectable discovery deps. */
 function nodeDeps(init: {
   overridePath?: string;
+  projectSearchDirs: string[];
   bundledDir: string;
   cacheDir: string;
   skipCache: boolean;
