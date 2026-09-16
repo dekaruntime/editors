@@ -7,10 +7,15 @@
 //
 // Search order (kept identical in the Zed and Neovim implementations):
 //   1. explicit override (deka.server.path setting)
-//   2. bundled / previously downloaded copy in the managed cache
-//   3. `dsc` on PATH
-//   4. managed download, version-pinned + checksum-verified, then cached
-//   5. clear error with a one-command fix
+//   2. project-scoped: node_modules/.bin/dsc, walked up from the open
+//      document's folder and each workspace folder. This is the exact
+//      runtime a project pins via @dekaruntime/deka (dsc ships next to deka,
+//      in lockstep version), so it wins over this extension's own
+//      DSC_VERSION pin below, which can lag behind what a project installed.
+//   3. bundled / previously downloaded copy in the managed cache
+//   4. `dsc` on PATH
+//   5. managed download, version-pinned + checksum-verified, then cached
+//   6. clear error with a one-command fix
 //
 // All effects are injected through DiscoveryDeps so the whole module is
 // unit-testable with a mocked fs/PATH/network (see src/test/discovery.test.ts).
@@ -42,9 +47,15 @@ export interface ReleaseManifest {
 export interface DiscoveryDeps {
   /** Level 1: explicit user override (absolute path to the dsc binary). */
   overridePath?: string;
-  /** Level 2: directory a platform binary may be bundled in (may not exist). */
+  /**
+   * Level 2: directories to walk upward from looking for a project-local
+   * `node_modules/.bin/dsc` (the open document's folder, each workspace
+   * folder). May be empty (e.g. no active editor, no open folder).
+   */
+  projectSearchDirs?: string[];
+  /** Level 3: directory a platform binary may be bundled in (may not exist). */
   bundledDir?: string;
-  /** Level 2/4: managed cache directory (created on demand). */
+  /** Level 3/5: managed cache directory (created on demand). */
   cacheDir: string;
   /** Skip the cached copy (force a fresh managed download). */
   skipCache?: boolean;
@@ -59,7 +70,11 @@ export interface DiscoveryDeps {
 }
 
 export type DiscoveryResult =
-  | { kind: 'found'; path: string; source: 'override' | 'bundled' | 'path' | 'downloaded' }
+  | {
+      kind: 'found';
+      path: string;
+      source: 'override' | 'project' | 'bundled' | 'path' | 'downloaded';
+    }
   | { kind: 'error'; message: string };
 
 export async function resolveDsc(deps: DiscoveryDeps): Promise<DiscoveryResult> {
@@ -73,7 +88,18 @@ export async function resolveDsc(deps: DiscoveryDeps): Promise<DiscoveryResult> 
     tried.push(`override ${deps.overridePath} (not an executable file)`);
   }
 
-  // 2. bundled, then previously downloaded copy in the managed cache
+  // 2. project-scoped: node_modules/.bin/dsc, walked up from the open
+  // document's folder and each workspace folder. Beats this extension's own
+  // DSC_VERSION pin because it is the exact runtime the project installed.
+  const projectDsc = await findProjectDsc(deps.projectSearchDirs ?? [], deps);
+  if (projectDsc) {
+    return { kind: 'found', path: projectDsc, source: 'project' };
+  }
+  if (deps.projectSearchDirs?.length) {
+    tried.push(`node_modules/.bin/dsc above ${deps.projectSearchDirs.join(', ')}`);
+  }
+
+  // 3. bundled, then previously downloaded copy in the managed cache
   const binaryName = `dsc-${deps.platform}`;
   const searchDirs = deps.skipCache
     ? [deps.bundledDir]
@@ -91,7 +117,7 @@ export async function resolveDsc(deps: DiscoveryDeps): Promise<DiscoveryResult> 
     tried.push(dir);
   }
 
-  // 3. PATH (DEKA_DSC env honored like deka's own lookup)
+  // 4. PATH (DEKA_DSC env honored like deka's own lookup)
   const envOverride = deps.env.DEKA_DSC;
   if (envOverride && (await deps.isExecutableFile(envOverride))) {
     return { kind: 'found', path: envOverride, source: 'path' };
@@ -102,7 +128,7 @@ export async function resolveDsc(deps: DiscoveryDeps): Promise<DiscoveryResult> 
   }
   tried.push('dsc on PATH');
 
-  // 4. managed download, version-pinned + checksum-verified
+  // 5. managed download, version-pinned + checksum-verified
   try {
     const downloaded = await downloadPinned(deps);
     return { kind: 'found', path: downloaded, source: 'downloaded' };
@@ -110,7 +136,7 @@ export async function resolveDsc(deps: DiscoveryDeps): Promise<DiscoveryResult> 
     tried.push(`managed download failed: ${errMessage(err)}`);
   }
 
-  // 5. clear error with a one-command fix
+  // 6. clear error with a one-command fix
   return {
     kind: 'error',
     message:
@@ -152,6 +178,42 @@ async function downloadPinned(deps: DiscoveryDeps): Promise<string> {
 
 function joinPath(dir: string, name: string): string {
   return dir.endsWith('/') || dir.endsWith('\\') ? `${dir}${name}` : `${dir}/${name}`;
+}
+
+/**
+ * Walk upward from each start directory (deduplicating already-visited
+ * directories across starts) looking for `node_modules/.bin/dsc`. First hit
+ * wins. Mirrors how Node itself resolves `node_modules` up the tree, so a
+ * monorepo with the project root above the open file still resolves.
+ */
+async function findProjectDsc(startDirs: string[], deps: DiscoveryDeps): Promise<string | null> {
+  const visited = new Set<string>();
+  for (const start of startDirs) {
+    if (!start) continue;
+    let dir: string | null = start;
+    let guard = 0;
+    while (dir && guard++ < 64) {
+      if (visited.has(dir)) break;
+      visited.add(dir);
+      const candidate = joinPath(joinPath(dir, 'node_modules/.bin'), 'dsc');
+      if (await deps.isExecutableFile(candidate)) {
+        return candidate;
+      }
+      dir = parentDir(dir);
+    }
+  }
+  return null;
+}
+
+/** Posix/Windows-ish parent directory, without touching the real filesystem. */
+function parentDir(dir: string): string | null {
+  const trimmed = dir.replace(/[\\/]+$/, '');
+  const sepIdx = Math.max(trimmed.lastIndexOf('/'), trimmed.lastIndexOf('\\'));
+  if (sepIdx < 0) return null;
+  if (sepIdx === 0) return trimmed.slice(0, 1); // posix root "/"
+  const parent = trimmed.slice(0, sepIdx);
+  if (parent === dir) return null;
+  return /^[A-Za-z]:$/.test(parent) ? `${parent}\\` : parent;
 }
 
 /** `which` semantics: scan the PATH env var for an executable file. */

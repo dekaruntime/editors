@@ -3,8 +3,24 @@
   "displayName": "DekaScript",
   "description": "DekaScript language support: LSP (dsc lsp), syntax highlighting for .ds and .dsx",
   "publisher": "dekaruntime",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "license": "Apache-2.0",
+  "icon": "icon.png",
+  "galleryBanner": {
+    "color": "#000000",
+    "theme": "dark"
+  },
+  "homepage": "https://deka.gg",
+  "bugs": {
+    "url": "https://github.com/dekaruntime/deka/issues"
+  },
+  "keywords": [
+    "dekascript",
+    "deka",
+    "react",
+    "jsx",
+    "lsp"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/dekaruntime/editors.git",
@@ -21,7 +37,7 @@
   "activationEvents": [
     "onLanguage:dekascript"
   ],
-  "main": "./out/extension.js",
+  "main": "./dist/extension.js",
   "contributes": {
     "languages": [
       {
@@ -50,7 +66,7 @@
         "deka.server.path": {
           "type": "string",
           "default": "",
-          "description": "Optional absolute path to the dsc binary. When empty (default), the extension falls back to bundled > PATH > managed download. Server is started as `dsc lsp` (stdio)."
+          "description": "Optional absolute path to the dsc binary. When empty (default), the extension falls back to project (node_modules/.bin/dsc) > bundled > PATH > managed download. Server is started as `dsc lsp` (stdio)."
         }
       }
     },
@@ -63,12 +79,14 @@
     ]
   },
   "scripts": {
-    "compile": "node ../scripts/sync-dsc-version.js && tsc -p ./",
+    "compile": "node ../scripts/sync-dsc-version.js && tsc -p ./ && npm run bundle",
+    "bundle": "esbuild src/extension.ts --bundle --platform=node --format=cjs --external:vscode --target=node18 --outfile=dist/extension.js",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile",
     "test": "node --test out/test/*.test.js",
     "vscode:prepublish": "npm run compile",
-    "package": "vsce package --out deka.vsix"
+    "package": "vsce package --out deka.vsix",
+    "check-vsix": "node ../scripts/check-vsix.js deka.vsix"
   },
   "dependencies": {
     "vscode-languageclient": "^9.0.1"
@@ -77,6 +95,7 @@
     "@types/node": "^22.10.0",
     "@types/vscode": "^1.85.0",
     "@vscode/vsce": "^3.2.0",
+    "esbuild": "^0.24.2",
     "typescript": "^5.7.0"
   }
 }

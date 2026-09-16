@@ -34,13 +34,19 @@ jobs:
           npm ci
           npm run compile
           npm test
+      - name: Package VSIX
+        working-directory: vscode
+        run: npx @vscode/vsce package --out deka.vsix
+      - name: Check VSIX contents (bundled main, README, icon)
+        working-directory: vscode
+        run: npm run check-vsix
       - name: Publish to VS Marketplace
         working-directory: vscode
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
-        run: npx @vscode/vsce publish -p "$VSCE_PAT"
+        run: npx @vscode/vsce publish -p "$VSCE_PAT" --packagePath deka.vsix
       - name: Publish to OpenVSX
         working-directory: vscode
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
-        run: npx ovsx publish -p "$OVSX_PAT"
+        run: npx ovsx publish deka.vsix -p "$OVSX_PAT"

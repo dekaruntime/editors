@@ -99,7 +99,75 @@ test('level 1: unusable override falls through to bundled', async () => {
   });
 });
 
-test('level 2: cached managed download is reused', async () => {
+test('level 2: project-scoped node_modules/.bin/dsc wins over bundled and PATH', async () => {
+  const { deps, state } = mockDeps({
+    projectSearchDirs: ['/repo/myapp/src'],
+    bundledDir: '/bundled',
+    env: { PATH: '/usr/local/bin' },
+  });
+  state.executables.add('/repo/node_modules/.bin/dsc');
+  state.executables.add('/bundled/' + BINARY);
+  state.executables.add('/usr/local/bin/dsc');
+  const result = await resolveDsc(deps);
+  assert.deepEqual(result, {
+    kind: 'found',
+    path: '/repo/node_modules/.bin/dsc',
+    source: 'project',
+  });
+});
+
+test('level 2: project search walks up from the open document, not just the workspace root', async () => {
+  const { deps, state } = mockDeps({
+    projectSearchDirs: ['/repo/myapp/src/components/deep'],
+  });
+  state.executables.add('/repo/myapp/node_modules/.bin/dsc');
+  const result = await resolveDsc(deps);
+  assert.deepEqual(result, {
+    kind: 'found',
+    path: '/repo/myapp/node_modules/.bin/dsc',
+    source: 'project',
+  });
+});
+
+test('level 2: project search checks every start dir (document dir and each workspace folder)', async () => {
+  const { deps, state } = mockDeps({
+    projectSearchDirs: ['/repo/myapp/src', '/other-workspace-folder'],
+  });
+  state.executables.add('/other-workspace-folder/node_modules/.bin/dsc');
+  const result = await resolveDsc(deps);
+  assert.deepEqual(result, {
+    kind: 'found',
+    path: '/other-workspace-folder/node_modules/.bin/dsc',
+    source: 'project',
+  });
+});
+
+test('level 2: no project dsc anywhere falls through to bundled', async () => {
+  const { deps, state } = mockDeps({
+    projectSearchDirs: ['/repo/myapp/src'],
+    bundledDir: '/bundled',
+  });
+  state.executables.add('/bundled/' + BINARY);
+  const result = await resolveDsc(deps);
+  assert.deepEqual(result, {
+    kind: 'found',
+    path: '/bundled/' + BINARY,
+    source: 'bundled',
+  });
+});
+
+test('level 1: explicit override still wins over a project-scoped dsc', async () => {
+  const { deps, state } = mockDeps({
+    overridePath: '/opt/custom/dsc',
+    projectSearchDirs: ['/repo/myapp/src'],
+  });
+  state.executables.add('/opt/custom/dsc');
+  state.executables.add('/repo/myapp/node_modules/.bin/dsc');
+  const result = await resolveDsc(deps);
+  assert.deepEqual(result, { kind: 'found', path: '/opt/custom/dsc', source: 'override' });
+});
+
+test('level 3: cached managed download is reused', async () => {
   const { deps, state } = mockDeps();
   state.executables.add('/cache/' + BINARY);
   const result = await resolveDsc(deps);
@@ -111,7 +179,7 @@ test('level 2: cached managed download is reused', async () => {
   assert.equal(state.downloads.length, 0, 'no re-download when cache hit');
 });
 
-test('level 3: non-executable DEKA_DSC does not short-circuit discovery', async () => {
+test('level 4: non-executable DEKA_DSC does not short-circuit discovery', async () => {
   const { deps, state } = mockDeps({ env: { DEKA_DSC: '/env/dsc' } });
   const result = await resolveDsc(deps);
   // /env/dsc is not executable, so discovery falls through to managed download.
@@ -123,7 +191,7 @@ test('level 3: non-executable DEKA_DSC does not short-circuit discovery', async 
   assert.equal(state.downloads.length, 1);
 });
 
-test('level 3: DEKA_DSC executable wins over download', async () => {
+test('level 4: DEKA_DSC executable wins over download', async () => {
   const { deps, state } = mockDeps({ env: { DEKA_DSC: '/env/dsc' } });
   state.executables.add('/env/dsc');
   const result = await resolveDsc(deps);
@@ -131,14 +199,14 @@ test('level 3: DEKA_DSC executable wins over download', async () => {
   assert.equal(state.downloads.length, 0);
 });
 
-test('level 3: dsc found on PATH via PATH scan', async () => {
+test('level 4: dsc found on PATH via PATH scan', async () => {
   const { deps, state } = mockDeps({ env: { PATH: '/usr/local/bin:/usr/bin' } });
   state.executables.add('/usr/local/bin/dsc');
   const result = await resolveDsc(deps);
   assert.deepEqual(result, { kind: 'found', path: '/usr/local/bin/dsc', source: 'path' });
 });
 
-test('level 4: full miss triggers pinned, checksum-verified download', async () => {
+test('level 5: full miss triggers pinned, checksum-verified download', async () => {
   const { deps, state } = mockDeps({ env: { PATH: '/usr/bin' } });
   const result = await resolveDsc(deps);
   assert.equal(result.kind, 'found');
@@ -158,7 +226,7 @@ test('level 4: full miss triggers pinned, checksum-verified download', async () 
   ]);
 });
 
-test('level 4: manifest version mismatch refuses the download', async () => {
+test('level 5: manifest version mismatch refuses the download', async () => {
   const { deps, state } = mockDeps({ env: { PATH: '/usr/bin' } });
   state.manifest = {
     version: '99.0.0',
@@ -169,7 +237,7 @@ test('level 4: manifest version mismatch refuses the download', async () => {
   if (result.kind === 'error') assert.match(result.message, /managed download failed/);
 });
 
-test('level 4: checksum mismatch refuses to install the binary', async () => {
+test('level 5: checksum mismatch refuses to install the binary', async () => {
   const { deps, state } = mockDeps({ env: { PATH: '/usr/bin' } });
   state.downloadSha256 = 'tampered';
   const result = await resolveDsc(deps);
@@ -177,7 +245,7 @@ test('level 4: checksum mismatch refuses to install the binary', async () => {
   if (result.kind === 'error') assert.match(result.message, /managed download failed/);
 });
 
-test('level 4: skipCache forces re-download even with a cached copy', async () => {
+test('level 5: skipCache forces re-download even with a cached copy', async () => {
   const { deps, state } = mockDeps({ skipCache: true, env: { PATH: '/usr/bin' } });
   state.executables.add('/cache/' + BINARY);
   const result = await resolveDsc(deps);
@@ -185,7 +253,7 @@ test('level 4: skipCache forces re-download even with a cached copy', async () =
   assert.equal(state.downloads.length, 1, 're-downloaded despite cache hit');
 });
 
-test('level 5: total failure produces a clear error with the one-command fix', async () => {
+test('level 6: total failure produces a clear error with the one-command fix', async () => {
   const { deps, state } = mockDeps({ env: { PATH: '/usr/bin' } });
   state.fetchErrors = new Error('network down');
   const result = await resolveDsc(deps);
